@@ -1,3 +1,7 @@
-export { default as DataTable } from './DataTable';
+'use client';
+
+export { DataTable } from './DataTable';
+export { DataTableDraggableRow } from './DataTableDraggableRow';
+export * from './hooks/useDataTableColumns';
 export * from './types';
-export { differenceBy, getValueAtPath, humanize, uniqBy } from './utils';
+export * from './utils';

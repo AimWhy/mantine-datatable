@@ -1,158 +1,231 @@
-import { ActionIcon, Box, Center, Group, Popover, createStyles, type MantineTheme, type Sx } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
-import { IconArrowUp, IconArrowsVertical, IconFilter } from '@tabler/icons-react';
-import type { BaseSyntheticEvent, CSSProperties, ReactNode } from 'react';
+import { ActionIcon, Box, Center, Flex, Group, TableTh, type MantineStyleProp, type MantineTheme } from '@mantine/core';
+import clsx from 'clsx';
+import { useRef, useState } from 'react';
+import { useDataTableColumnsContext } from './DataTableColumns.context';
+import { DataTableHeaderCellFilter } from './DataTableHeaderCellFilter';
+import { DataTableResizableHeaderHandle } from './DataTableResizableHeaderHandle';
+import { useMediaQueryStringOrFunction } from './hooks';
+import { IconArrowUp } from './icons/IconArrowUp';
+import { IconArrowsVertical } from './icons/IconArrowsVertical';
+import { IconGripVertical } from './icons/IconGripVertical';
+import { IconX } from './icons/IconX';
 import type { DataTableColumn, DataTableSortProps } from './types';
-import { humanize, useMediaQueryStringOrFunction } from './utils';
-
-const useStyles = createStyles((theme) => ({
-  sortableColumnHeader: {
-    cursor: 'pointer',
-    transition: 'background .15s ease',
-    '&:hover:not(:has(button:hover))': {
-      background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : theme.colors.gray[0],
-    },
-  },
-  sortableColumnHeaderGroup: {
-    gap: '0.25em',
-  },
-  columnHeaderText: {
-    overflow: 'hidden',
-    whiteSpace: 'nowrap',
-    textOverflow: 'ellipsis',
-  },
-  sortableColumnHeaderText: {
-    minWidth: 0,
-    flexGrow: 1,
-  },
-  sortableColumnHeaderIcon: {
-    transition: 'transform .15s ease',
-  },
-  sortableColumnHeaderIconRotated: {
-    transform: 'rotate3d(0, 0, 1, 180deg)',
-  },
-  sortableColumnHeaderUnsortedIcon: {
-    color: theme.colorScheme === 'dark' ? theme.colors.dark[3] : theme.colors.gray[5],
-    transition: 'color .15s ease',
-    'th:hover &': {
-      color: theme.colorScheme === 'dark' ? theme.colors.dark[2] : theme.colors.gray[6],
-    },
-  },
-}));
+import { ELLIPSIS, NOWRAP, TEXT_ALIGN_CENTER, TEXT_ALIGN_LEFT, TEXT_ALIGN_RIGHT } from './utilityClasses';
+import { humanize } from './utils';
 
 type DataTableHeaderCellProps<T> = {
-  className?: string;
-  sx?: Sx;
-  style?: CSSProperties;
+  className: string | undefined;
+  style: MantineStyleProp | undefined;
   visibleMediaQuery: string | ((theme: MantineTheme) => string) | undefined;
-  title: ReactNode | undefined;
-  sortStatus: DataTableSortProps['sortStatus'];
-  sortIcons: DataTableSortProps['sortIcons'];
-  onSortStatusChange: DataTableSortProps['onSortStatusChange'];
-} & Pick<DataTableColumn<T>, 'accessor' | 'sortable' | 'textAlignment' | 'width' | 'filter' | 'filtering'>;
+  title: React.ReactNode | undefined;
+  sortStatus: DataTableSortProps<T>['sortStatus'];
+  sortIcons: DataTableSortProps<T>['sortIcons'];
+  onSortStatusChange: DataTableSortProps<T>['onSortStatusChange'];
+} & Pick<
+  DataTableColumn<T>,
+  | 'accessor'
+  | 'sortable'
+  | 'draggable'
+  | 'toggleable'
+  | 'resizable'
+  | 'textAlign'
+  | 'width'
+  | 'filter'
+  | 'filterPopoverProps'
+  | 'filtering'
+  | 'sortKey'
+>;
 
-function Filter<T>({ children, isActive }: { children: DataTableColumn<T>['filter']; isActive: boolean }) {
-  const [isOpen, { close, toggle }] = useDisclosure(false);
-
-  return (
-    <Popover withArrow withinPortal shadow="md" opened={isOpen} onClose={close} trapFocus>
-      <Popover.Target>
-        <ActionIcon
-          onClick={(e) => {
-            e.preventDefault();
-            toggle();
-          }}
-          variant={isActive ? 'default' : 'subtle'}
-        >
-          <IconFilter size={14} />
-        </ActionIcon>
-      </Popover.Target>
-      <Popover.Dropdown>{typeof children === 'function' ? children({ close }) : children}</Popover.Dropdown>
-    </Popover>
-  );
-}
-
-export default function DataTableHeaderCell<T>({
+export function DataTableHeaderCell<T>({
   className,
-  sx,
   style,
   accessor,
   visibleMediaQuery,
   title,
   sortable,
+  draggable,
+  toggleable,
+  resizable,
   sortIcons,
-  textAlignment,
+  textAlign,
   width,
   sortStatus,
   onSortStatusChange,
   filter,
+  filterPopoverProps,
   filtering,
+  sortKey,
 }: DataTableHeaderCellProps<T>) {
-  const { cx, classes } = useStyles();
+  const { setSourceColumn, setTargetColumn, swapColumns, setColumnsToggle } = useDataTableColumnsContext();
+  const [dragOver, setDragOver] = useState<boolean>(false);
+  const columnRef = useRef<HTMLTableCellElement | null>(null);
+
   if (!useMediaQueryStringOrFunction(visibleMediaQuery)) return null;
-  const text = title ?? humanize(accessor);
+  const text = title ?? humanize(accessor as string);
   const tooltip = typeof text === 'string' ? text : undefined;
+
   const sortAction =
     sortable && onSortStatusChange
-      ? (e?: BaseSyntheticEvent) => {
-          if (e?.defaultPrevented) {
-            return;
-          }
+      ? (e?: React.BaseSyntheticEvent) => {
+          if (e?.defaultPrevented) return;
+
           onSortStatusChange({
+            sortKey,
             columnAccessor: accessor,
             direction:
               sortStatus?.columnAccessor === accessor
                 ? sortStatus.direction === 'asc'
                   ? 'desc'
                   : 'asc'
-                : sortStatus?.direction ?? 'asc',
+                : (sortStatus?.direction ?? 'asc'),
           });
         }
       : undefined;
+
+  const handleColumnDragStart = (e: React.DragEvent) => {
+    e.stopPropagation();
+    setSourceColumn(accessor as string);
+    setDragOver(false);
+  };
+
+  const handleColumnDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setTargetColumn(accessor as string);
+    setDragOver(true);
+  };
+
+  const handleColumnDrop = () => {
+    setTargetColumn(accessor as string);
+    setDragOver(false);
+    swapColumns();
+  };
+
+  const handleColumnDragEnter = () => {
+    setDragOver(true);
+  };
+
+  const handleColumnDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleColumnToggle = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+
+    setColumnsToggle((columnsToggle) =>
+      columnsToggle.map((c) => {
+        if (c.accessor === accessor) {
+          return { ...c, toggled: false };
+        }
+        return c;
+      })
+    );
+  };
+
   return (
-    <Box
-      component="th"
-      className={cx({ [classes.sortableColumnHeader]: sortable }, className)}
-      sx={[
+    <TableTh
+      className={clsx(
         {
-          '&&': { textAlign: textAlignment },
-          width,
-          minWidth: width,
-          maxWidth: width,
+          'mantine-datatable-header-cell-sortable': sortable,
+          'mantine-datatable-header-cell-toggleable': toggleable,
+          'mantine-datatable-header-cell-resizable': resizable,
         },
-        sx,
+        className
+      )}
+      style={[
+        {
+          width,
+          ...(!resizable ? { minWidth: width, maxWidth: width } : { minWidth: '1px' }),
+        },
+        style,
       ]}
-      style={style}
       role={sortable ? 'button' : undefined}
       tabIndex={sortable ? 0 : undefined}
       onClick={sortAction}
       onKeyDown={(e) => e.key === 'Enter' && sortAction?.()}
+      ref={columnRef}
     >
-      <Group className={classes.sortableColumnHeaderGroup} position="apart" noWrap>
-        <Box className={cx(classes.columnHeaderText, classes.sortableColumnHeaderText)} title={tooltip}>
-          {text}
-        </Box>
+      <Group className="mantine-datatable-header-cell-sortable-group" justify="space-between" wrap="nowrap">
+        <Flex
+          align="center"
+          w="100%"
+          className={clsx({
+            'mantine-datatable-header-cell-draggable': draggable,
+            'mantine-datatable-header-cell-drag-over': dragOver,
+          })}
+          draggable={draggable}
+          onDragStart={draggable ? handleColumnDragStart : undefined}
+          onDragEnter={draggable ? handleColumnDragEnter : undefined}
+          onDragOver={draggable ? handleColumnDragOver : undefined}
+          onDrop={draggable ? handleColumnDrop : undefined}
+          onDragLeave={draggable ? handleColumnDragLeave : undefined}
+        >
+          {draggable ? (
+            <Center role="img" aria-label="Drag column">
+              <ActionIcon
+                className="mantine-datatable-header-cell-draggable-action-icon"
+                variant="subtle"
+                size="xs"
+                onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                  e.stopPropagation();
+                }}
+              >
+                <IconGripVertical />
+              </ActionIcon>
+            </Center>
+          ) : null}
+          <Box
+            className={clsx(
+              'mantine-datatable-header-cell-sortable-text',
+              {
+                [TEXT_ALIGN_LEFT]: textAlign === 'left',
+                [TEXT_ALIGN_CENTER]: textAlign === 'center',
+                [TEXT_ALIGN_RIGHT]: textAlign === 'right',
+              },
+              NOWRAP,
+              ELLIPSIS
+            )}
+            title={tooltip}
+          >
+            {text}
+          </Box>
+        </Flex>
+        {toggleable ? (
+          <Center className="mantine-datatable-header-cell-toggleable-icon" role="img" aria-label="Toggle column">
+            <ActionIcon size="xs" variant="light" onClick={handleColumnToggle}>
+              <IconX />
+            </ActionIcon>
+          </Center>
+        ) : null}
         {sortable || sortStatus?.columnAccessor === accessor ? (
           <>
             {sortStatus?.columnAccessor === accessor ? (
               <Center
-                className={cx(classes.sortableColumnHeaderIcon, {
-                  [classes.sortableColumnHeaderIconRotated]: sortStatus.direction === 'desc',
+                className={clsx('mantine-datatable-header-cell-sortable-icon', {
+                  'mantine-datatable-header-cell-sortable-icon-reversed': sortStatus.direction === 'desc',
                 })}
                 role="img"
                 aria-label={`Sorted ${sortStatus.direction === 'desc' ? 'descending' : 'ascending'}`}
               >
-                {sortIcons?.sorted || <IconArrowUp size={14} />}
+                {sortIcons?.sorted || <IconArrowUp />}
               </Center>
             ) : (
-              <Center className={classes.sortableColumnHeaderUnsortedIcon} role="img" aria-label="Not sorted">
-                {sortIcons?.unsorted || <IconArrowsVertical size={14} />}
+              <Center
+                className="mantine-datatable-header-cell-sortable-unsorted-icon"
+                role="img"
+                aria-label="Not sorted"
+              >
+                {sortIcons?.unsorted || <IconArrowsVertical />}
               </Center>
             )}
           </>
         ) : null}
-        {filter ? <Filter isActive={!!filtering}>{filter}</Filter> : null}
+        {filter ? (
+          <DataTableHeaderCellFilter filterPopoverProps={filterPopoverProps} isActive={!!filtering}>
+            {filter}
+          </DataTableHeaderCellFilter>
+        ) : null}
       </Group>
-    </Box>
+      {resizable ? <DataTableResizableHeaderHandle accessor={accessor as string} columnRef={columnRef} /> : null}
+    </TableTh>
   );
 }

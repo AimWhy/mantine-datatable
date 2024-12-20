@@ -1,69 +1,61 @@
-import { Checkbox, createStyles, px } from '@mantine/core';
-import type { ChangeEventHandler } from 'react';
-
-const useStyles = createStyles((theme) => {
-  const shadowGradientAlpha = theme.colorScheme === 'dark' ? 0.5 : 0.05;
-  return {
-    root: {
-      position: 'sticky',
-      zIndex: 1,
-      left: 0,
-      background: 'inherit',
-      '&::after': {
-        content: '""',
-        position: 'absolute',
-        top: 0,
-        right: -px(theme.spacing.sm),
-        bottom: 0,
-        borderLeft: `1px solid ${theme.colorScheme === 'dark' ? theme.colors.dark[4] : theme.colors.gray[3]}`,
-        width: theme.spacing.sm,
-        background: `linear-gradient(to right, ${theme.fn.rgba(theme.black, shadowGradientAlpha)}, ${theme.fn.rgba(
-          theme.black,
-          0
-        )}), linear-gradient(to right, ${theme.fn.rgba(theme.black, shadowGradientAlpha)}, ${theme.fn.rgba(
-          theme.black,
-          0
-        )} 30%)`,
-        pointerEvents: 'none',
-        opacity: 0,
-        transition: 'opacity .15s ease',
-      },
-    },
-    withRightShadow: {
-      '&::after': {
-        opacity: 1,
-      },
-    },
-    checkbox: {
-      cursor: 'pointer',
-    },
-  };
-});
+import { Checkbox, MantineStyleProp, TableTd, type CheckboxProps } from '@mantine/core';
+import clsx from 'clsx';
+import type { DataTableSelectionTrigger } from './types';
+import { POINTER_CURSOR } from './utilityClasses';
 
 type DataTableRowSelectorCellProps<T> = {
+  className: string | undefined;
+  style: MantineStyleProp | undefined;
   record: T;
-  recordIndex: number;
+  index: number;
+  trigger: DataTableSelectionTrigger;
   withRightShadow: boolean;
   checked: boolean;
   disabled: boolean;
-  onChange: ChangeEventHandler<HTMLInputElement> | undefined;
-  getCheckboxProps: (record: T, recordIndex: number) => Record<string, unknown>;
+  onChange: React.MouseEventHandler | undefined;
+  checkboxProps: CheckboxProps | undefined;
+  getCheckboxProps: (record: T, index: number) => CheckboxProps;
 };
 
-export default function DataTableRowSelectorCell<T>({
+export function DataTableRowSelectorCell<T>({
+  className,
+  style,
   record,
-  recordIndex,
+  index,
+  trigger,
+  onChange,
   withRightShadow,
+  checkboxProps,
   getCheckboxProps,
   ...otherProps
-}: DataTableRowSelectorCellProps<T>) {
-  const { cx, classes } = useStyles();
+}: Readonly<DataTableRowSelectorCellProps<T>>) {
+  const allCheckboxProps = { ...checkboxProps, ...getCheckboxProps(record, index) };
+  const enabled = !otherProps.disabled && !allCheckboxProps.disabled;
+
+  const handleClick: React.MouseEventHandler = (e) => {
+    e.stopPropagation();
+    if (trigger === 'cell' && enabled) {
+      onChange?.(e);
+    }
+  };
+
   return (
-    <td
-      className={cx(classes.root, { [classes.withRightShadow]: withRightShadow })}
-      onClick={(e) => e.stopPropagation()}
+    <TableTd
+      className={clsx(
+        'mantine-datatable-row-selector-cell',
+        { [POINTER_CURSOR]: trigger === 'cell' && enabled },
+        className
+      )}
+      style={style}
+      data-shadow-visible={withRightShadow || undefined}
+      onClick={handleClick}
     >
-      <Checkbox classNames={{ input: classes.checkbox }} {...otherProps} {...getCheckboxProps(record, recordIndex)} />
-    </td>
+      <Checkbox
+        classNames={enabled ? { input: POINTER_CURSOR } : undefined}
+        onChange={onChange as unknown as React.ChangeEventHandler}
+        {...otherProps}
+        {...allCheckboxProps}
+      />
+    </TableTd>
   );
 }

@@ -1,85 +1,85 @@
-import { Box, createStyles, type Sx } from '@mantine/core';
-import type { CSSProperties, MouseEventHandler, ReactNode } from 'react';
+import { TableTd, type MantineStyleProp } from '@mantine/core';
+import clsx from 'clsx';
+import { useMediaQueryStringOrFunction } from './hooks';
 import type { DataTableColumn } from './types';
-import { getValueAtPath, useMediaQueryStringOrFunction } from './utils';
-
-const useStyles = createStyles({
-  withPointerCursor: {
-    cursor: 'pointer',
-  },
-  noWrap: {
-    whiteSpace: 'nowrap',
-  },
-  ellipsis: {
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-});
+import {
+  CONTEXT_MENU_CURSOR,
+  ELLIPSIS,
+  NOWRAP,
+  POINTER_CURSOR,
+  TEXT_ALIGN_CENTER,
+  TEXT_ALIGN_LEFT,
+  TEXT_ALIGN_RIGHT,
+} from './utilityClasses';
+import { getValueAtPath } from './utils';
 
 type DataTableRowCellProps<T> = {
-  className?: string;
-  sx?: Sx;
-  style?: CSSProperties;
+  className: string | undefined;
+  style: MantineStyleProp | undefined;
   record: T;
-  recordIndex: number;
-  defaultRender: ((record: T, index: number, accessor: string) => ReactNode) | undefined;
-  onClick?: MouseEventHandler<HTMLTableCellElement>;
+  index: number;
+  defaultRender:
+    | ((record: T, index: number, accessor: keyof T | (string & NonNullable<unknown>)) => React.ReactNode)
+    | undefined;
+  onClick: React.MouseEventHandler<HTMLTableCellElement> | undefined;
+  onDoubleClick: React.MouseEventHandler<HTMLTableCellElement> | undefined;
+  onContextMenu: React.MouseEventHandler<HTMLTableCellElement> | undefined;
 } & Pick<
   DataTableColumn<T>,
-  | 'accessor'
-  | 'visibleMediaQuery'
-  | 'textAlignment'
-  | 'width'
-  | 'noWrap'
-  | 'ellipsis'
-  | 'render'
-  | 'customCellAttributes'
+  'accessor' | 'visibleMediaQuery' | 'textAlign' | 'width' | 'noWrap' | 'ellipsis' | 'render' | 'customCellAttributes'
 >;
 
-export default function DataTableRowCell<T>({
+export function DataTableRowCell<T>({
   className,
-  sx,
   style,
   visibleMediaQuery,
   record,
-  recordIndex,
+  index,
   onClick,
+  onDoubleClick,
+  onContextMenu,
   noWrap,
   ellipsis,
-  textAlignment,
+  textAlign,
   width,
   accessor,
   render,
   defaultRender,
   customCellAttributes,
 }: DataTableRowCellProps<T>) {
-  const { cx, classes } = useStyles();
   if (!useMediaQueryStringOrFunction(visibleMediaQuery)) return null;
   return (
-    <Box
-      component="td"
-      className={cx(
-        { [classes.noWrap]: noWrap || ellipsis, [classes.ellipsis]: ellipsis, [classes.withPointerCursor]: onClick },
+    <TableTd
+      className={clsx(
+        {
+          [NOWRAP]: noWrap || ellipsis,
+          [ELLIPSIS]: ellipsis,
+          [POINTER_CURSOR]: onClick || onDoubleClick,
+          [CONTEXT_MENU_CURSOR]: onContextMenu,
+          [TEXT_ALIGN_LEFT]: textAlign === 'left',
+          [TEXT_ALIGN_CENTER]: textAlign === 'center',
+          [TEXT_ALIGN_RIGHT]: textAlign === 'right',
+        },
         className
       )}
-      sx={[
+      style={[
         {
           width,
           minWidth: width,
           maxWidth: width,
-          textAlign: textAlignment,
         },
-        sx,
+        style,
       ]}
-      style={style}
       onClick={onClick}
-      {...customCellAttributes?.(record, recordIndex)}
+      onDoubleClick={onDoubleClick}
+      onContextMenu={onContextMenu}
+      {...customCellAttributes?.(record, index)}
     >
       {render
-        ? render(record, recordIndex)
+        ? render(record, index)
         : defaultRender
-        ? defaultRender(record, recordIndex, accessor)
-        : (getValueAtPath(record, accessor) as ReactNode)}
-    </Box>
+          ? defaultRender(record, index, accessor)
+          : (getValueAtPath(record, accessor) as React.ReactNode)}
+    </TableTd>
   );
 }

@@ -1,179 +1,274 @@
-import { Box, createStyles, type Sx } from '@mantine/core';
-import type { ChangeEventHandler, CSSProperties, MouseEventHandler, ReactNode } from 'react';
-import DataTableRowCell from './DataTableRowCell';
-import DataTableRowExpansion from './DataTableRowExpansion';
-import DataTableRowSelectorCell from './DataTableRowSelectorCell';
+import { MantineTheme, TableTr, type CheckboxProps, type MantineColor, type MantineStyleProp } from '@mantine/core';
+import clsx from 'clsx';
+import { DataTableRowCell } from './DataTableRowCell';
+import { DataTableRowExpansion } from './DataTableRowExpansion';
+import { DataTableRowSelectorCell } from './DataTableRowSelectorCell';
+import { getRowCssVariables } from './cssVariables';
 import { useRowExpansion } from './hooks';
-import type { DataTableCellClickHandler, DataTableColumn } from './types';
-
-const useStyles = createStyles((theme) => {
-  const baseColor = theme.colors[theme.primaryColor][6];
-  return {
-    withPointerCursor: {
-      cursor: 'pointer',
-    },
-    selected: {
-      '&&': {
-        'tr&': {
-          background: theme.colorScheme === 'dark' ? theme.fn.darken(baseColor, 0.6) : theme.fn.lighten(baseColor, 0.9),
-        },
-        'table[data-striped] tbody &:nth-of-type(odd)': {
-          background:
-            theme.colorScheme === 'dark' ? theme.fn.darken(baseColor, 0.55) : theme.fn.lighten(baseColor, 0.85),
-        },
-      },
-    },
-    contextMenuVisible: {
-      '&&': {
-        'tr&': {
-          background: theme.colorScheme === 'dark' ? theme.fn.darken(baseColor, 0.5) : theme.fn.lighten(baseColor, 0.7),
-        },
-        'table[data-striped] tbody &:nth-of-type(odd)': {
-          background:
-            theme.colorScheme === 'dark' ? theme.fn.darken(baseColor, 0.45) : theme.fn.lighten(baseColor, 0.65),
-        },
-      },
-    },
-  };
-});
+import type {
+  DataTableCellClickHandler,
+  DataTableColumn,
+  DataTableDefaultColumnProps,
+  DataTableProps,
+  DataTableRowClickHandler,
+  DataTableSelectionTrigger,
+} from './types';
+import { CONTEXT_MENU_CURSOR, POINTER_CURSOR } from './utilityClasses';
 
 type DataTableRowProps<T> = {
   record: T;
-  recordIndex: number;
+  index: number;
   columns: DataTableColumn<T>[];
-  defaultColumnRender: ((record: T, index: number, accessor: string) => ReactNode) | undefined;
+  defaultColumnProps: DataTableDefaultColumnProps<T> | undefined;
+  defaultColumnRender:
+    | ((record: T, index: number, accessor: keyof T | (string & NonNullable<unknown>)) => React.ReactNode)
+    | undefined;
+  selectionTrigger: DataTableSelectionTrigger;
   selectionVisible: boolean;
   selectionChecked: boolean;
-  onSelectionChange: ChangeEventHandler<HTMLInputElement> | undefined;
+  onSelectionChange: React.MouseEventHandler | undefined;
   isRecordSelectable: ((record: T, index: number) => boolean) | undefined;
-  getSelectionCheckboxProps: (record: T, recordIndex: number) => Record<string, unknown>;
-  onClick: MouseEventHandler<HTMLTableRowElement> | undefined;
+  selectionCheckboxProps: CheckboxProps | undefined;
+  getSelectionCheckboxProps: (record: T, index: number) => CheckboxProps;
+  onClick: DataTableRowClickHandler<T> | undefined;
+  onDoubleClick: DataTableRowClickHandler<T> | undefined;
+  onContextMenu: DataTableRowClickHandler<T> | undefined;
   onCellClick: DataTableCellClickHandler<T> | undefined;
-  onContextMenu: MouseEventHandler<HTMLTableRowElement> | undefined;
+  onCellDoubleClick: DataTableCellClickHandler<T> | undefined;
+  onCellContextMenu: DataTableCellClickHandler<T> | undefined;
   expansion: ReturnType<typeof useRowExpansion<T>>;
-  customRowAttributes?: (record: T, recordIndex: number) => Record<string, string | number>;
-  className?: string | ((record: T, recordIndex: number) => string | undefined);
-  style?: CSSProperties | ((record: T, recordIndex: number) => CSSProperties | undefined);
-  sx?: Sx;
-  contextMenuVisible: boolean;
-  leftShadowVisible: boolean;
-};
+  customAttributes?: (record: T, index: number) => Record<string, unknown>;
+  color:
+    | ((record: T, index: number) => MantineColor | undefined | { light: MantineColor; dark: MantineColor })
+    | undefined;
+  backgroundColor:
+    | ((record: T, index: number) => MantineColor | undefined | { light: MantineColor; dark: MantineColor })
+    | undefined;
+  className?: string | ((record: T, index: number) => string | undefined);
+  style?: (record: T, index: number) => MantineStyleProp | undefined;
+  selectorCellShadowVisible: boolean;
+  selectionColumnClassName: string | undefined;
+  selectionColumnStyle: MantineStyleProp | undefined;
+  idAccessor: string;
+} & Pick<DataTableProps<T>, 'rowFactory'>;
 
-export default function DataTableRow<T>({
+export function DataTableRow<T>({
   record,
-  recordIndex,
+  index,
   columns,
+  defaultColumnProps,
   defaultColumnRender,
+  selectionTrigger,
   selectionVisible,
   selectionChecked,
   onSelectionChange,
   isRecordSelectable,
+  selectionCheckboxProps,
   getSelectionCheckboxProps,
   onClick,
-  onCellClick,
+  onDoubleClick,
   onContextMenu,
+  onCellClick,
+  onCellDoubleClick,
+  onCellContextMenu,
   expansion,
-  customRowAttributes,
+  customAttributes,
+  color,
+  backgroundColor,
   className,
   style,
-  sx,
-  contextMenuVisible,
-  leftShadowVisible,
-}: DataTableRowProps<T>) {
-  const { cx, classes } = useStyles();
+  selectorCellShadowVisible,
+  selectionColumnClassName,
+  selectionColumnStyle,
+  rowFactory,
+}: Readonly<DataTableRowProps<T>>) {
+  const cols = (
+    <>
+      {selectionVisible && (
+        <DataTableRowSelectorCell<T>
+          className={selectionColumnClassName}
+          style={selectionColumnStyle}
+          record={record}
+          index={index}
+          trigger={selectionTrigger}
+          withRightShadow={selectorCellShadowVisible}
+          checked={selectionChecked}
+          disabled={!onSelectionChange || (isRecordSelectable ? !isRecordSelectable(record, index) : false)}
+          onChange={onSelectionChange}
+          checkboxProps={selectionCheckboxProps}
+          getCheckboxProps={getSelectionCheckboxProps}
+        />
+      )}
+
+      {columns.map(({ hidden, hiddenContent, ...columnProps }, columnIndex) => {
+        if (hidden || hiddenContent) return null;
+
+        const {
+          accessor,
+          visibleMediaQuery,
+          textAlign,
+          noWrap,
+          ellipsis,
+          width,
+          render,
+          cellsClassName,
+          cellsStyle,
+          customCellAttributes,
+        } = { ...defaultColumnProps, ...columnProps };
+
+        return (
+          <DataTableRowCell<T>
+            key={accessor as React.Key}
+            className={typeof cellsClassName === 'function' ? cellsClassName(record, index) : cellsClassName}
+            style={cellsStyle?.(record, index)}
+            visibleMediaQuery={visibleMediaQuery}
+            record={record}
+            index={index}
+            onClick={
+              onCellClick
+                ? (event) => onCellClick({ event, record, index, column: columnProps, columnIndex })
+                : undefined
+            }
+            onDoubleClick={
+              onCellDoubleClick
+                ? (event) => onCellDoubleClick({ event, record, index, column: columnProps, columnIndex })
+                : undefined
+            }
+            onContextMenu={
+              onCellContextMenu
+                ? (event) => onCellContextMenu({ event, record, index, column: columnProps, columnIndex })
+                : undefined
+            }
+            accessor={accessor}
+            textAlign={textAlign}
+            noWrap={noWrap}
+            ellipsis={ellipsis}
+            width={width}
+            render={render}
+            defaultRender={defaultColumnRender}
+            customCellAttributes={customCellAttributes}
+          />
+        );
+      })}
+    </>
+  );
+
+  const expandedElement = expansion && (
+    <DataTableRowExpansion
+      colSpan={columns.filter(({ hidden }) => !hidden).length + (selectionVisible ? 1 : 0)}
+      open={expansion.isRowExpanded(record)}
+      content={expansion.content({ record, index })}
+      collapseProps={expansion.collapseProps}
+    />
+  );
+
+  const rowProps = getRowProps({
+    record,
+    index,
+    selectionChecked,
+    onClick,
+    onDoubleClick,
+    onContextMenu,
+    expansion,
+    customAttributes,
+    color,
+    backgroundColor,
+    className,
+    style,
+  });
+
+  if (rowFactory) {
+    return rowFactory({
+      record,
+      index,
+      rowProps,
+      children: cols,
+      expandedElement,
+    });
+  }
 
   return (
     <>
-      <Box
-        component="tr"
-        className={cx(
-          {
-            [classes.withPointerCursor]: onClick || expansion?.expandOnClick,
-            [classes.selected]: selectionChecked,
-            [classes.contextMenuVisible]: contextMenuVisible,
-          },
-          typeof className === 'function' ? className(record, recordIndex) : className
-        )}
-        onClick={(e) => {
-          if (expansion) {
-            const { isRowExpanded, expandOnClick, expandRow, collapseRow } = expansion;
-            if (expandOnClick) {
-              if (isRowExpanded(record)) {
-                collapseRow(record);
-              } else {
-                expandRow(record);
-              }
-            }
-          }
-          onClick?.(e);
-        }}
-        style={typeof style === 'function' ? style(record, recordIndex) : style}
-        sx={sx}
-        {...customRowAttributes?.(record, recordIndex)}
-        onContextMenu={onContextMenu}
-      >
-        {selectionVisible && (
-          <DataTableRowSelectorCell<T>
-            record={record}
-            recordIndex={recordIndex}
-            withRightShadow={leftShadowVisible}
-            checked={selectionChecked}
-            disabled={!onSelectionChange || (isRecordSelectable ? !isRecordSelectable(record, recordIndex) : false)}
-            onChange={onSelectionChange}
-            getCheckboxProps={getSelectionCheckboxProps}
-          />
-        )}
-        {columns.map((column, columnIndex) => {
-          const {
-            accessor,
-            hidden,
-            visibleMediaQuery,
-            textAlignment,
-            noWrap,
-            ellipsis,
-            width,
-            render,
-            cellsClassName,
-            cellsStyle,
-            cellsSx,
-            customCellAttributes,
-          } = column;
-
-          let handleCellClick: MouseEventHandler<HTMLTableCellElement> | undefined;
-          if (onCellClick) {
-            handleCellClick = (event) => onCellClick({ event, record, recordIndex, column, columnIndex });
-          }
-
-          return hidden ? null : (
-            <DataTableRowCell<T>
-              key={accessor}
-              className={typeof cellsClassName === 'function' ? cellsClassName(record, recordIndex) : cellsClassName}
-              style={typeof cellsStyle === 'function' ? cellsStyle(record, recordIndex) : cellsStyle}
-              sx={cellsSx}
-              visibleMediaQuery={visibleMediaQuery}
-              record={record}
-              recordIndex={recordIndex}
-              onClick={handleCellClick}
-              accessor={accessor}
-              textAlignment={textAlignment}
-              noWrap={noWrap}
-              ellipsis={ellipsis}
-              width={width}
-              render={render}
-              defaultRender={defaultColumnRender}
-              customCellAttributes={customCellAttributes}
-            />
-          );
-        })}
-      </Box>
-      {expansion && (
-        <DataTableRowExpansion
-          colSpan={columns.filter((c) => !c.hidden).length + (selectionVisible ? 1 : 0)}
-          open={expansion.isRowExpanded(record)}
-          content={expansion.content(record, recordIndex)}
-          collapseProps={expansion.collapseProps}
-        />
-      )}
+      <TableTr {...rowProps}>{cols}</TableTr>
+      {expandedElement}
     </>
   );
+}
+
+type GetRowPropsArgs<T> = Readonly<
+  Pick<
+    DataTableRowProps<T>,
+    | 'record'
+    | 'index'
+    | 'selectionChecked'
+    | 'onClick'
+    | 'onDoubleClick'
+    | 'onContextMenu'
+    | 'expansion'
+    | 'customAttributes'
+    | 'color'
+    | 'backgroundColor'
+    | 'className'
+    | 'style'
+  >
+>;
+
+export function getRowProps<T>({
+  record,
+  index,
+  selectionChecked,
+  onClick,
+  onDoubleClick,
+  onContextMenu,
+  expansion,
+  customAttributes,
+  color,
+  backgroundColor,
+  className,
+  style,
+}: GetRowPropsArgs<T>) {
+  return {
+    className: clsx(
+      'mantine-datatable-row',
+      {
+        [POINTER_CURSOR]:
+          onClick || onDoubleClick || (expansion?.isExpandable({ record, index }) && expansion?.expandOnClick),
+      },
+      { [CONTEXT_MENU_CURSOR]: onContextMenu },
+      typeof className === 'function' ? className(record, index) : className
+    ),
+
+    ['data-selected']: selectionChecked || undefined,
+
+    onClick: (e: React.MouseEvent<HTMLTableRowElement, MouseEvent>) => {
+      if (expansion) {
+        const { isExpandable, isRowExpanded, expandOnClick, expandRow, collapseRow } = expansion;
+        if (isExpandable({ record, index }) && expandOnClick) {
+          if (isRowExpanded(record)) {
+            collapseRow(record);
+          } else {
+            expandRow(record);
+          }
+        }
+      }
+      onClick?.({ event: e, record, index });
+    },
+    onDoubleClick: onDoubleClick
+      ? (e: React.MouseEvent<HTMLTableRowElement, MouseEvent>) => onDoubleClick({ event: e, record, index })
+      : undefined,
+    onContextMenu: onContextMenu
+      ? (e: React.MouseEvent<HTMLTableRowElement, MouseEvent>) => onContextMenu({ event: e, record, index })
+      : undefined,
+    style: [
+      color || backgroundColor
+        ? (theme: MantineTheme) => {
+            const colorValue = color?.(record, index);
+            const backgroundColorValue = backgroundColor?.(record, index);
+            return getRowCssVariables({ theme, color: colorValue, backgroundColor: backgroundColorValue });
+          }
+        : undefined,
+      style?.(record, index),
+    ],
+    ...(customAttributes?.(record, index) ?? {}),
+  };
 }

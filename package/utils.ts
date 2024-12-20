@@ -1,25 +1,4 @@
-import { useMantineTheme, type MantineTheme } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
-import { Key, useEffect, useLayoutEffect, useMemo } from 'react';
-import { useMediaQueries } from './useMediaQueries';
-
-export const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
-
-export function useMediaQueryStringOrFunction(mediaQuery: string | ((theme: MantineTheme) => string) | undefined) {
-  const theme = useMantineTheme();
-  const mediaQueryValue = typeof mediaQuery === 'function' ? mediaQuery(theme) : mediaQuery;
-  return useMediaQuery(mediaQueryValue || '', true);
-}
-
-export function useMediaQueriesStringOrFunction(queries: (string | ((theme: MantineTheme) => string) | undefined)[]) {
-  const theme = useMantineTheme();
-  const values = useMemo(
-    () => queries.map((query) => (typeof query === 'function' ? query(theme) : query) ?? ''),
-    [queries, theme]
-  );
-  const defaults = useMemo(() => queries.map(() => true), [queries]);
-  return useMediaQueries(values, defaults);
-}
+import type { DropResult } from '@hello-pangea/dnd';
 
 /**
  * Utility function that returns a humanized version of a string, e.g. "camelCase" -> "Camel Case"
@@ -50,15 +29,56 @@ export function uniqBy<T>(arr: T[], iteratee: (value: T) => unknown) {
 /**
  * Utility function that returns the value at a given path in an object
  */
-export function getValueAtPath(obj: unknown, path: string) {
+export function getValueAtPath<T>(obj: T, path: keyof T | (string & NonNullable<unknown>)) {
   if (!path) return undefined;
-  const pathArray = path.match(/([^[.\]])+/g) as string[];
+  const pathArray = (path as string).match(/([^[.\]])+/g) as string[];
   return pathArray.reduce((prevObj: unknown, key) => prevObj && (prevObj as Record<string, unknown>)[key], obj);
 }
 
 /**
  * Utility function that returns the record id using idAccessor
  */
-export function getRecordId<T>(record: T, idAccessor: string | ((record: T) => Key)) {
-  return typeof idAccessor === 'string' ? getValueAtPath(record, idAccessor) : idAccessor(record);
+export function getRecordId<T>(
+  record: T,
+  idAccessor: keyof T | (string & NonNullable<unknown>) | ((record: T) => React.Key)
+) {
+  return typeof idAccessor === 'string'
+    ? getValueAtPath(record, idAccessor)
+    : (idAccessor as (record: T) => React.Key)(record);
+}
+
+/**
+ * Utility function that reorders an array of records by a given field used for drag'n'drop functionality.
+ * @see https://github.com/hello-pangea/dnd
+ */
+export function reorderRecords<T>(dropResult: DropResult, records: T[]): T[] {
+  const draft = structuredClone(records);
+  const prev = draft[dropResult.source.index];
+
+  if (dropResult.destination) {
+    draft.splice(dropResult.source.index, 1);
+    draft.splice(dropResult.destination.index, 0, prev);
+  }
+
+  return draft;
+}
+
+/**
+ * Utility function that swaps elements of an array, by a given result from drag'n'drop functionality.
+ * @see https://github.com/hello-pangea/dnd
+ */
+export function swapRecords<T>(dropResult: DropResult, records: T[]): T[] {
+  const draft = structuredClone(records);
+
+  const destination = dropResult.destination;
+
+  if (!destination) return draft;
+
+  const sourceEl = draft[dropResult.source.index];
+  const destEl = draft[destination.index];
+
+  draft.splice(destination.index, 1, sourceEl);
+  draft.splice(dropResult.source.index, 1, destEl);
+
+  return draft;
 }

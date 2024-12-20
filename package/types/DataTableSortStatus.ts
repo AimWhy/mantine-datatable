@@ -1,12 +1,18 @@
-export type DataTableSortStatus = {
+export type DataTableSortStatus<T = Record<string, unknown>> = {
   /**
-   * Sort column accessor; you can use dot-notation for nested objects property drilling
-   * (i.e. `department.name` or `department.company.name`)
+   * Sort column key for nested values.
+   * @type {string}
    */
-  columnAccessor: string;
+  sortKey?: string;
+  /**
+   * Sort column accessor.
+   * You can use dot-notation for nested objects property drilling
+   * (i.e. `department.name` or `department.company.name`).
+   */
+  columnAccessor: keyof T | (string & NonNullable<unknown>);
 
   /**
-   * Sort direction; `asc` for ascending or `desc` for descending
+   * Sort direction - `asc` for ascending, `desc` for descending.
    */
   direction: 'asc' | 'desc';
 };
